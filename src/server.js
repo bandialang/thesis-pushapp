@@ -174,6 +174,7 @@ export function startServer() {
 
     if (config.kakaoClientId && config.kakaoRedirectUri) {
       console.log(`[server] kakao auth: http://localhost:${config.port}/oauth/kakao/start`);
+      console.log(`[server] kakao redirect uri: ${config.kakaoRedirectUri}`);
     }
   });
 
