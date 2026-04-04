@@ -38,8 +38,16 @@ function toInt(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function cleanString(value, fallback = "") {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return value.trim();
+}
+
 function parseDailySendTimes(value) {
-  const raw = value || "07:00,15:00";
+  const raw = cleanString(value, "07:00,15:00") || "07:00,15:00";
   const parts = raw
     .split(",")
     .map((item) => item.trim())
@@ -67,17 +75,17 @@ function parseDailySendTimes(value) {
 
 export const config = {
   port: toInt(process.env.PORT, 3000),
-  timezone: process.env.TIMEZONE || "Asia/Seoul",
+  timezone: cleanString(process.env.TIMEZONE, "Asia/Seoul") || "Asia/Seoul",
   dailySendTimes: parseDailySendTimes(process.env.DAILY_SEND_TIMES),
   paperCount: toInt(process.env.PAPER_COUNT, 5),
   lookbackDays: toInt(process.env.LOOKBACK_DAYS, 45),
   noRepeatDays: toInt(process.env.NO_REPEAT_DAYS, 14),
-  stateFilePath: process.env.STATE_FILE_PATH || path.resolve(process.cwd(), "data", "history.json"),
-  authFilePath: process.env.AUTH_FILE_PATH || path.resolve(process.cwd(), "data", "auth.json"),
-  kakaoAccessToken: process.env.KAKAO_ACCESS_TOKEN || "",
-  kakaoRefreshToken: process.env.KAKAO_REFRESH_TOKEN || "",
-  kakaoClientId: process.env.KAKAO_CLIENT_ID || "",
-  kakaoClientSecret: process.env.KAKAO_CLIENT_SECRET || "",
-  kakaoRedirectUri: process.env.KAKAO_REDIRECT_URI || "",
-  kciApiKey: process.env.KCI_API_KEY || ""
+  stateFilePath: cleanString(process.env.STATE_FILE_PATH) || path.resolve(process.cwd(), "data", "history.json"),
+  authFilePath: cleanString(process.env.AUTH_FILE_PATH) || path.resolve(process.cwd(), "data", "auth.json"),
+  kakaoAccessToken: cleanString(process.env.KAKAO_ACCESS_TOKEN),
+  kakaoRefreshToken: cleanString(process.env.KAKAO_REFRESH_TOKEN),
+  kakaoClientId: cleanString(process.env.KAKAO_CLIENT_ID),
+  kakaoClientSecret: cleanString(process.env.KAKAO_CLIENT_SECRET),
+  kakaoRedirectUri: cleanString(process.env.KAKAO_REDIRECT_URI),
+  kciApiKey: cleanString(process.env.KCI_API_KEY)
 };
