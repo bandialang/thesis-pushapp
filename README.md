@@ -56,7 +56,7 @@ http://localhost:3000/auth/status
 
 ```text
 TIMEZONE=Asia/Seoul
-DAILY_SEND_TIMES=07:00,15:00
+DAILY_SEND_TIMES=09:00,15:00
 PAPER_COUNT=5
 LOOKBACK_DAYS=45
 NO_REPEAT_DAYS=14
@@ -84,7 +84,7 @@ https://your-app.up.railway.app/oauth/kakao/callback
 
 - `PORT`: 서버 포트
 - `TIMEZONE`: 추천 날짜 계산 기준 타임존
-- `DAILY_SEND_TIMES`: 자동 발송 시각 목록. 예: `07:00,15:00`
+- `DAILY_SEND_TIMES`: 자동 발송 시각 목록. 예: `09:00,15:00`
 - `PAPER_COUNT`: 하루 추천 논문 수
 - `LOOKBACK_DAYS`: 최근 며칠 내 논문을 후보군으로 볼지
 - `NO_REPEAT_DAYS`: 최근 며칠 동안 보낸 논문은 다시 추천하지 않을지
@@ -103,5 +103,5 @@ https://your-app.up.railway.app/oauth/kakao/callback
 - 최근 `NO_REPEAT_DAYS` 안에 보낸 논문은 우선 제외합니다.
 - 후보 풀이 너무 좁으면, 추천 수를 채우기 위해 오래된 논문이 일부 다시 들어올 수 있습니다.
 - 액세스 토큰이 만료되면 저장된 리프레시 토큰으로 자동 재발급을 시도합니다.
-- 기본 자동 발송 시각은 `07:00`, `15:00`입니다.
+- 기본 자동 발송 시각은 `09:00`, `15:00`입니다.
 - 카카오 메시지 API는 카카오 개발자 설정과 동의 절차가 완료되어야 동작합니다.

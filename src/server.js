@@ -14,7 +14,55 @@ function getDateKey(timezone) {
   }).format(new Date());
 }
 
-export async function runDailyRecommendation(dateKey = getDateKey(config.timezone)) {
+function getDateTimeParts(date, timezone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number.parseInt(part.value, 10)])
+  );
+}
+
+function getTimeZoneOffsetMs(date, timezone) {
+  const parts = getDateTimeParts(date, timezone);
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return asUtc - date.getTime();
+}
+
+function getZonedDate(timezone, year, month, day, hour, minute, second = 0) {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second);
+  const firstPass = new Date(utcGuess - getTimeZoneOffsetMs(new Date(utcGuess), timezone));
+  return new Date(utcGuess - getTimeZoneOffsetMs(firstPass, timezone));
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getScheduledSlotsForDate(dateKey, timezone) {
+  const [year, month, day] = dateKey.split("-").map((value) => Number.parseInt(value, 10));
+
+  return config.dailySendTimes.map((sendTime) => ({
+    ...sendTime,
+    dateKey,
+    slotKey: `${dateKey}T${sendTime.label}`,
+    scheduledAt: getZonedDate(timezone, year, month, day, sendTime.hour, sendTime.minute)
+  }));
+}
+
+export async function runDailyRecommendation({ dateKey = getDateKey(config.timezone), slotKey = null } = {}) {
   const state = loadState();
   const selection = await getDailyPaperSelection({
     count: config.paperCount,
@@ -28,7 +76,8 @@ export async function runDailyRecommendation(dateKey = getDateKey(config.timezon
   const delivery = await sendMemoToMe(message);
   recordSentSelection({
     dateKey: selection.dateKey,
-    papers: selection.papers
+    papers: selection.papers,
+    slotKey
   });
 
   return {
@@ -47,37 +96,52 @@ function textResponse(response, statusCode, body) {
   response.end(body);
 }
 
-function scheduleNextRun(task) {
+async function runScheduledRecommendation(slot) {
+  const result = await runDailyRecommendation({ dateKey: slot.dateKey, slotKey: slot.slotKey });
+  console.log(`[scheduler] sent ${result.selection.papers.length} papers for ${slot.slotKey}`);
+  return result;
+}
+
+async function sendMissedRunsForToday() {
   const now = new Date();
-  let next = null;
+  const todayDateKey = getDateKey(config.timezone);
+  const sentRuns = new Set((loadState().sentRuns || []).map((entry) => entry.slotKey));
+  const pendingSlots = getScheduledSlotsForDate(todayDateKey, config.timezone)
+    .filter((slot) => slot.scheduledAt <= now && !sentRuns.has(slot.slotKey))
+    .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime());
 
-  for (const sendTime of config.dailySendTimes) {
-    const candidate = new Date(now);
-    candidate.setHours(sendTime.hour, sendTime.minute, 0, 0);
-
-    if (candidate > now && (!next || candidate < next)) {
-      next = candidate;
+  for (const slot of pendingSlots) {
+    console.log(`[scheduler] recovering missed send for ${slot.slotKey}`);
+    try {
+      await runScheduledRecommendation(slot);
+    } catch (error) {
+      console.error(`[scheduler] recovery failed for ${slot.slotKey}:`, error);
     }
   }
+}
+
+function scheduleNextRun() {
+  const now = new Date();
+  const todayDateKey = getDateKey(config.timezone);
+  const tomorrowDateKey = addDaysToDateKey(todayDateKey, 1);
+  const next = [...getScheduledSlotsForDate(todayDateKey, config.timezone), ...getScheduledSlotsForDate(tomorrowDateKey, config.timezone)]
+    .filter((slot) => slot.scheduledAt > now)
+    .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
 
   if (!next) {
-    const first = config.dailySendTimes[0];
-    next = new Date(now);
-    next.setDate(next.getDate() + 1);
-    next.setHours(first.hour, first.minute, 0, 0);
+    throw new Error("No next scheduled run could be determined.");
   }
 
-  const delay = next.getTime() - now.getTime();
-  console.log(`[scheduler] next send at ${next.toISOString()}`);
+  const delay = next.scheduledAt.getTime() - now.getTime();
+  console.log(`[scheduler] next send at ${next.scheduledAt.toISOString()} (${config.timezone} ${next.slotKey})`);
 
   setTimeout(async () => {
     try {
-      const result = await task();
-      console.log(`[scheduler] sent ${result.selection.papers.length} papers for ${result.selection.dateKey}`);
+      await runScheduledRecommendation(next);
     } catch (error) {
-      console.error("[scheduler] failed:", error);
+      console.error(`[scheduler] failed for ${next.slotKey}:`, error);
     } finally {
-      scheduleNextRun(task);
+      scheduleNextRun();
     }
   }, delay);
 }
@@ -133,7 +197,7 @@ export function startServer() {
 
       if (request.method === "POST" && url.pathname === "/send-now") {
         const requestedDateKey = url.searchParams.get("date") || getDateKey(config.timezone);
-        const result = await runDailyRecommendation(requestedDateKey);
+        const result = await runDailyRecommendation({ dateKey: requestedDateKey });
         return jsonResponse(response, 200, {
           ok: true,
           dateKey: result.selection.dateKey,
@@ -178,6 +242,7 @@ export function startServer() {
     }
   });
 
-  scheduleNextRun(runDailyRecommendation);
+  void sendMissedRunsForToday();
+  scheduleNextRun();
   return server;
 }

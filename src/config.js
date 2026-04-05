@@ -47,7 +47,7 @@ function cleanString(value, fallback = "") {
 }
 
 function parseDailySendTimes(value) {
-  const raw = cleanString(value, "07:00,15:00") || "07:00,15:00";
+  const raw = cleanString(value, "09:00,15:00") || "09:00,15:00";
   const parts = raw
     .split(",")
     .map((item) => item.trim())
@@ -70,7 +70,7 @@ function parseDailySendTimes(value) {
     })
     .filter(Boolean);
 
-  return parsed.length > 0 ? parsed : [{ hour: 7, minute: 0, label: "07:00" }, { hour: 15, minute: 0, label: "15:00" }];
+  return parsed.length > 0 ? parsed : [{ hour: 9, minute: 0, label: "09:00" }, { hour: 15, minute: 0, label: "15:00" }];
 }
 
 export const config = {

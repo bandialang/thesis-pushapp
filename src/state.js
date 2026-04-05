@@ -8,7 +8,8 @@ function ensureStateDirectoryExists(filePath) {
 
 function createEmptyState() {
   return {
-    sentHistory: []
+    sentHistory: [],
+    sentRuns: []
   };
 }
 
@@ -27,7 +28,10 @@ export function loadState() {
       return createEmptyState();
     }
 
-    return parsed;
+    return {
+      sentHistory: parsed.sentHistory,
+      sentRuns: Array.isArray(parsed.sentRuns) ? parsed.sentRuns : []
+    };
   } catch {
     return createEmptyState();
   }
@@ -38,7 +42,15 @@ export function saveState(state) {
   fs.writeFileSync(config.stateFilePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-export function recordSentSelection({ dateKey, papers }) {
+function pruneSentRuns(sentRuns) {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return sentRuns.filter((entry) => {
+    const sentAt = new Date(entry.sentAt || 0).getTime();
+    return Number.isFinite(sentAt) && sentAt >= cutoff;
+  });
+}
+
+export function recordSentSelection({ dateKey, papers, slotKey = null, sentAt = new Date().toISOString() }) {
   const state = loadState();
   const remaining = state.sentHistory.filter((entry) => entry.dateKey !== dateKey);
 
@@ -48,5 +60,15 @@ export function recordSentSelection({ dateKey, papers }) {
   });
 
   remaining.sort((left, right) => left.dateKey.localeCompare(right.dateKey));
-  saveState({ sentHistory: remaining });
+
+  const sentRuns = pruneSentRuns(state.sentRuns).filter((entry) => entry.slotKey !== slotKey);
+  if (slotKey) {
+    sentRuns.push({
+      slotKey,
+      dateKey,
+      sentAt
+    });
+  }
+
+  saveState({ sentHistory: remaining, sentRuns });
 }
